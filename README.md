@@ -29,9 +29,9 @@ BiocManager::install("fgsea")
 
 🚀 Quick Start
 Clone the repository:
-git clone https://github.com/bingmoon/ST001683-Metabolic-Anchoring.git
+git clone https://github.com/bingmoon/ST001683-Metabolic-Anchoring-/tree/main
 Run the main analysis script:
-source("Scripts/MCI_Analysis_Main.R")
+source("Scripts/Analysis.R")
 📊 Data Source
 Raw data were acquired from the Metabolomics Workbench under Project ID: ST001683.
 
