@@ -26,3 +26,17 @@ install.packages(c("ggplot2", "dplyr", "pROC", "pheatmap", "ggpubr"))
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 BiocManager::install("fgsea")
+
+🚀 Quick Start
+Clone the repository:
+git clone https://github.com/bingmoon/ST001683-Metabolic-Anchoring.git
+Run the main analysis script:
+source("Scripts/MCI_Analysis_Main.R")
+📊 Data Source
+Raw data were acquired from the Metabolomics Workbench under Project ID: ST001683.
+
+✉️ Contact
+Corresponding Author: Hongbo He (moxizhen@gmail.com)
+Institution: West China Hospital, Sichuan University
+⚖️ License
+This project is licensed under the MIT License - see the LICENSE file for details.
