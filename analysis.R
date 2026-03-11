@@ -878,3 +878,97 @@ ggsave("Figure_11_FGSEA_Pathways.png", plot = p_fgsea_final, width = 9, height =
 print(p_fgsea_final)
 
 cat(">>> [Step 3.5] 全部工作圆满完成！\n")
+
+
+
+
+# ==============================================================================
+# ST001688 In Vitro 机制验证：全自动整合、统计与出图
+# ==============================================================================
+library(jsonlite)
+library(data.table)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+cat(">>> [Step 1] 正在通过 API 拉取并清洗元数据 (Mapping)...\n")
+# 1. 获取分组信息
+metadata_raw <- fromJSON("https://www.metabolomicsworkbench.org/rest/study/study_id/ST001688/factors")
+mapping_clean <- bind_rows(metadata_raw) %>%
+  mutate(
+    Sample_ID = trimws(local_sample_id),
+    Group = case_when(
+      grepl("supernatant", factors, ignore.case = TRUE) ~ "Bt_Culture",
+      grepl("media_blank|blank", factors, ignore.case = TRUE) ~ "Media_Blank",
+      TRUE ~ "Other"
+    )
+  ) %>% filter(Group != "Other")
+
+cat(">>> [Step 2] 正在提取代谢物数据...\n")
+# 2. 定义高效提取函数
+extract_clean_csv <- function(file_name, keyword, label) {
+  if(!file.exists(file_name)) return(NULL)
+  dt <- fread(file_name, header = TRUE, fill = TRUE)
+  # 找包含关键词的行
+  row_idx <- grep(keyword, dt[[1]], ignore.case = TRUE)[1]
+  if(is.na(row_idx)) return(NULL)
+  
+  # 提取与 mapping 对齐的样本
+  common_ids <- intersect(colnames(dt), mapping_clean$Sample_ID)
+  vals <- dt[row_idx, ..common_ids]
+  
+  data.frame(
+    Sample_ID = common_ids,
+    Abundance = as.numeric(t(vals)),
+    Metabolite = label
+  ) %>% filter(!is.na(Abundance))
+}
+
+# 执行提取
+dat_trp <- extract_clean_csv("ST001688_HILIC_POS_clean.csv", "TRYPTOPHAN", "Tryptophan")
+dat_ipa <- extract_clean_csv("ST001688_RP_POS_clean.csv", "INDOLEPROPIONIC", "IPA")
+dat_5hi <- extract_clean_csv("ST001688_RP_NEG_clean.csv", "5-HYDROXYINDOLE", "5-HIAA")
+
+cat(">>> [Step 3] 合并数据并计算统计量...\n")
+# 3. 数据合并与 Table S10 生成
+all_data <- bind_rows(dat_trp, dat_ipa, dat_5hi) %>%
+  inner_join(mapping_clean, by = "Sample_ID")
+
+table_s10 <- all_data %>%
+  group_by(Metabolite, Group) %>%
+  summarise(
+    N = n(),
+    Mean_Raw = mean(Abundance, na.rm = TRUE),
+    SD_Raw = sd(Abundance, na.rm = TRUE),
+    .groups = "drop"
+  )
+write.csv(table_s10, "Table_S10_In_Vitro_Validation.csv", row.names = FALSE)
+
+# 4. 计算 Log2FC 并绘图
+fc_data <- table_s10 %>%
+  select(Metabolite, Group, Mean_Raw) %>%
+  pivot_wider(names_from = Group, values_from = Mean_Raw) %>%
+  mutate(
+    Log2FC = log2(Bt_Culture / Media_Blank),
+    Direction = ifelse(Log2FC > 0, "Produced by Bt", "Consumed by Bt")
+  ) %>% filter(!is.na(Log2FC))
+
+cat(">>> [Step 4] 正在绘制 Figure 12...\n")
+p_fc <- ggplot(fc_data, aes(x = Metabolite, y = Log2FC, fill = Direction)) +
+  geom_col(color = "black", width = 0.5, linewidth = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray30", linewidth = 1) +
+  scale_fill_manual(values = c("Produced by Bt" = "#E41A1C", "Consumed by Bt" = "#377EB8")) +
+  geom_text(aes(label = sprintf("Log2FC = %.2f", Log2FC),
+                vjust = ifelse(Log2FC > 0, -0.8, 1.8)), size = 5, fontface = "bold") +
+  scale_y_continuous(limits = c(-1.5, max(fc_data$Log2FC)+1.5)) +
+  theme_bw(base_size = 15) +
+  labs(title = "In Vitro Mechanistic Validation: The Substrate Sink",
+       subtitle = "Cross-validation using pure bacterial cultures (Project ST001688)",
+       y = "Log2 Fold Change (Bt Culture vs. Media)", x = "") +
+  theme(legend.position = "top", legend.title = element_blank(),
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank(), panel.grid.major.x = element_blank())
+
+ggsave("Figure_12_FoldChange_Validation.pdf", p_fc, width = 7, height = 6)
+ggsave("Figure_12_FoldChange_Validation.png", p_fc, width = 7, height = 6, dpi = 300)
+cat(">>> 全部完成！Table S10 与 Figure 12 已保存在本地。\n")
