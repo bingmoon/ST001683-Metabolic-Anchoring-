@@ -883,92 +883,96 @@ cat(">>> [Step 3.5] 全部工作圆满完成！\n")
 
 
 # ==============================================================================
-# ST001688 In Vitro 机制验证：全自动整合、统计与出图
+# 终极定稿：ST001688 跨尺度机制验证 (In Vivo + In Vitro)
 # ==============================================================================
-library(jsonlite)
-library(data.table)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(ggpubr)
+library(stringr)
 
-cat(">>> [Step 1] 正在通过 API 拉取并清洗元数据 (Mapping)...\n")
-# 1. 获取分组信息
-metadata_raw <- fromJSON("https://www.metabolomicsworkbench.org/rest/study/study_id/ST001688/factors")
-mapping_clean <- bind_rows(metadata_raw) %>%
-  mutate(
-    Sample_ID = trimws(local_sample_id),
-    Group = case_when(
-      grepl("supernatant", factors, ignore.case = TRUE) ~ "Bt_Culture",
-      grepl("media_blank|blank", factors, ignore.case = TRUE) ~ "Media_Blank",
-      TRUE ~ "Other"
-    )
-  ) %>% filter(Group != "Other")
+# --- 1. 建立基准 Mapping 表 (确保分母一致) ---
+mapping_final <- mapping_df %>%
+  mutate(Group = case_when(
+    grepl("supernatant", Group_Info, ignore.case = TRUE) ~ "Bt_Culture",
+    grepl("media_blank|blank", Group_Info, ignore.case = TRUE) ~ "Media_Blank",
+    TRUE ~ "Other"
+  )) %>%
+  filter(Group != "Other") %>%
+  mutate(Sample_ID = str_trim(Sample_ID))
 
-cat(">>> [Step 2] 正在提取代谢物数据...\n")
-# 2. 定义高效提取函数
-extract_clean_csv <- function(file_name, keyword, label) {
-  if(!file.exists(file_name)) return(NULL)
-  dt <- fread(file_name, header = TRUE, fill = TRUE)
-  # 找包含关键词的行
-  row_idx <- grep(keyword, dt[[1]], ignore.case = TRUE)[1]
-  if(is.na(row_idx)) return(NULL)
+# --- 2. 严谨提取函数 (多重校验) ---
+extract_rigorous <- function(file_path, keyword, label) {
+  if(!file.exists(file_path)) return(NULL)
+  lines <- readLines(file_path, warn = FALSE)
   
-  # 提取与 mapping 对齐的样本
-  common_ids <- intersect(colnames(dt), mapping_clean$Sample_ID)
-  vals <- dt[row_idx, ..common_ids]
+  # 定位表头和数据
+  header_idx <- grep("Metabolite_name", lines)[1]
+  data_idx <- grep(keyword, lines, ignore.case = TRUE)[1]
+  if(is.na(data_idx)) return(NULL)
   
-  data.frame(
-    Sample_ID = common_ids,
-    Abundance = as.numeric(t(vals)),
-    Metabolite = label
-  ) %>% filter(!is.na(Abundance))
+  # 正则解析：确保不漏掉任何一个数字
+  ids <- unlist(str_extract_all(lines[header_idx], "ncbimw_[0-9]+"))
+  vals <- as.numeric(unlist(str_extract_all(lines[data_idx], "(?<=[\t ])[0-9.]+(?=[\t \r\n]|$)")))
+  
+  n_len <- min(length(ids), length(vals))
+  df_raw <- data.frame(Sample_ID = ids[1:n_len], Abundance = vals[1:n_len])
+  
+  # 关键：与 Mapping 表强制对齐，确保缺失样本补为 0 (未检出)
+  df_merged <- mapping_final %>%
+    left_join(df_raw, by = "Sample_ID") %>%
+    mutate(Abundance = replace_na(Abundance, 0), Metabolite = label)
+  
+  return(df_merged)
 }
 
-# 执行提取
-dat_trp <- extract_clean_csv("ST001688_HILIC_POS_clean.csv", "TRYPTOPHAN", "Tryptophan")
-dat_ipa <- extract_clean_csv("ST001688_RP_POS_clean.csv", "INDOLEPROPIONIC", "IPA")
-dat_5hi <- extract_clean_csv("ST001688_RP_NEG_clean.csv", "5-HYDROXYINDOLE", "5-HIAA")
+# --- 3. 执行全量提取 ---
+d1 <- extract_rigorous("ST001688_HILIC_POS_clean.csv", "TRYPTOPHAN", "Tryptophan")
+d2 <- extract_rigorous("ST001688_RP_POS_clean.csv", "INDOLEPROPIONIC", "IPA")
+d3 <- extract_rigorous("ST001688_RP_NEG_clean.csv", "5-HYDROXYINDOLE", "5-HIAA")
 
-cat(">>> [Step 3] 合并数据并计算统计量...\n")
-# 3. 数据合并与 Table S10 生成
-all_data <- bind_rows(dat_trp, dat_ipa, dat_5hi) %>%
-  inner_join(mapping_clean, by = "Sample_ID")
+vitro_all <- bind_rows(d1, d2, d3)
 
-table_s10 <- all_data %>%
+# --- 4. 生成统计表 Table S10 ---
+table_s10 <- vitro_all %>%
   group_by(Metabolite, Group) %>%
   summarise(
     N = n(),
-    Mean_Raw = mean(Abundance, na.rm = TRUE),
-    SD_Raw = sd(Abundance, na.rm = TRUE),
+    Mean_Raw = mean(Abundance),
+    SD_Raw = sd(Abundance),
     .groups = "drop"
   )
-write.csv(table_s10, "Table_S10_In_Vitro_Validation.csv", row.names = FALSE)
+write.csv(table_s10, "Table_S10_Final_Stats.csv", row.names = FALSE)
 
-# 4. 计算 Log2FC 并绘图
+# --- 5. 绘图 Panel A：原始丰度点图 (展示显著性) ---
+plot_data_a <- vitro_all %>% mutate(Log2 = log2(Abundance + 1))
+p_a <- ggplot(plot_data_a, aes(x = Metabolite, y = Log2, fill = Group)) +
+  stat_summary(fun = mean, geom = "bar", position = position_dodge(0.8), width = 0.7, color = "black") +
+  stat_summary(fun.data = mean_se, geom = "errorbar", position = position_dodge(0.8), width = 0.2) +
+  geom_jitter(position = position_dodge(0.8), alpha = 0.1, size = 0.5) +
+  scale_fill_manual(values = c("Bt_Culture"="#E41A1C", "Media_Blank"="#999999")) +
+  stat_compare_means(aes(group = Group), label = "p.signif", method = "wilcox.test", label.y.npc = "top") +
+  theme_bw() + labs(title = "A. Absolute Intensities (Log2)", y = "Log2(Abundance+1)", x="")
+
+# --- 6. 绘图 Panel B：倍数变化 (展示机制方向) ---
 fc_data <- table_s10 %>%
   select(Metabolite, Group, Mean_Raw) %>%
   pivot_wider(names_from = Group, values_from = Mean_Raw) %>%
-  mutate(
-    Log2FC = log2(Bt_Culture / Media_Blank),
-    Direction = ifelse(Log2FC > 0, "Produced by Bt", "Consumed by Bt")
-  ) %>% filter(!is.na(Log2FC))
+  mutate(Log2FC = log2(Bt_Culture / Media_Blank)) %>%
+  mutate(Direction = ifelse(Log2FC > 0, "Produced", "Consumed"))
 
-cat(">>> [Step 4] 正在绘制 Figure 12...\n")
-p_fc <- ggplot(fc_data, aes(x = Metabolite, y = Log2FC, fill = Direction)) +
-  geom_col(color = "black", width = 0.5, linewidth = 0.8) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray30", linewidth = 1) +
-  scale_fill_manual(values = c("Produced by Bt" = "#E41A1C", "Consumed by Bt" = "#377EB8")) +
-  geom_text(aes(label = sprintf("Log2FC = %.2f", Log2FC),
-                vjust = ifelse(Log2FC > 0, -0.8, 1.8)), size = 5, fontface = "bold") +
-  scale_y_continuous(limits = c(-1.5, max(fc_data$Log2FC)+1.5)) +
-  theme_bw(base_size = 15) +
-  labs(title = "In Vitro Mechanistic Validation: The Substrate Sink",
-       subtitle = "Cross-validation using pure bacterial cultures (Project ST001688)",
-       y = "Log2 Fold Change (Bt Culture vs. Media)", x = "") +
-  theme(legend.position = "top", legend.title = element_blank(),
-        plot.title = element_text(face = "bold"),
-        panel.grid.minor = element_blank(), panel.grid.major.x = element_blank())
+p_b <- ggplot(fc_data, aes(x = Metabolite, y = Log2FC, fill = Direction)) +
+  geom_col(color = "black", width = 0.6) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_fill_manual(values = c("Produced"="#E41A1C", "Consumed"="#377EB8")) +
+  geom_text(aes(label = sprintf("%.2f", Log2FC), vjust = ifelse(Log2FC > 0, -1, 1.5)), fontface="bold") +
+  theme_bw() + labs(title = "B. Mechanistic Proof (Log2FC)", y = "Log2 Fold Change")
 
-ggsave("Figure_12_FoldChange_Validation.pdf", p_fc, width = 7, height = 6)
-ggsave("Figure_12_FoldChange_Validation.png", p_fc, width = 7, height = 6, dpi = 300)
-cat(">>> 全部完成！Table S10 与 Figure 12 已保存在本地。\n")
+# --- 7. 合并双图并导出 ---
+library(gridExtra)
+p_final <- grid.arrange(p_a, p_b, ncol = 1)
+ggsave("Figure_12_Comprehensive_Validation.png", p_final, width = 8, height = 10, dpi = 300)
+ggsave("Figure_12_Comprehensive_Validation.pdf", p_final, width = 8, height = 10)
+
+cat("\n>>> 最终核查结果 (Log2FC):\n")
+print(fc_data)
