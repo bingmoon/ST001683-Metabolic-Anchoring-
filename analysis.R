@@ -742,7 +742,19 @@ print(p_auc_rank)
 # ==============================================================================
 library(ggplot2); library(dplyr); library(tidyr); library(ggpubr)
 
-cat(">>> [Step 3.3] 正在执行 MCI 代谢流机制验证分析...\n")
+get_col_precise <- function(keyword, exclude = NULL) {
+  all_cols <- colnames(final_df_processed)
+  # 1. 初步匹配关键词
+  matches <- grep(keyword, all_cols, value = TRUE, ignore.case = TRUE)
+  # 2. 排除同位素 (带有 D1, D2... 或 C13 的)
+  matches <- matches[!grepl("D[0-9]|C13", matches)]
+  # 3. 排除特定干扰项 (如：查 TRYPTOPHAN 时排除 HYDROXY)
+  if (!is.null(exclude)) {
+    matches <- matches[!grepl(exclude, matches, ignore.case = TRUE)]
+  }
+  # 4. 返回第一个匹配最干净的结果
+  return(matches[1])
+}
 
 # 1. 锁定核心代谢物 (继承前步优化逻辑)
 col_trp  <- get_col_precise("TRYPTOPHAN", exclude = "HYDROXY")
