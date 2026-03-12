@@ -627,24 +627,33 @@ cor_dat_scatter <- final_df_processed %>%
          HI5_Product = all_of(col_5hi_raw))
 
 # 2. 绘制高质量 ggscatter (无损保留你的统计参数)
+# （1） 绘图 (设置 cor.coef = FALSE，关闭自动标注)
 p_fmet_final <- ggscatter(cor_dat_scatter, x = "fMet_Signal", y = "HI5_Product",
-          add = "reg.line",                         
-          conf.int = TRUE,                          
-          color = "Organ", palette = "jco",         
-          shape = "Organ",
-          cor.coef = TRUE, cor.method = "spearman", 
-          cor.coeff.args = list(label.sep = "\n", size = 5)) +
+                          add = "reg.line",             
+                          conf.int = TRUE,             
+                          color = "Organ", palette = "jco",     
+                          shape = "Organ",
+                          cor.coef = FALSE) + # 这里关闭自动计算标签
+  
+  # （2） 手动添加符合 Nature 规范的标签 (使用 plot math 语法)
+  # label 里的内容会被解析为数学公式：R=0.87, P=2.6x10^-8
+  
+  # x 和 y 的坐标建议设置在左上角 (根据你的数据范围 x~14, y~14.5)
+  annotate("text", x = 13.5, y = 14.5, 
+           label = "italic(R) == 0.87 ~~~ italic(P) == 2.6 %*% 10^-8", 
+           parse = TRUE, size = 5.5, hjust = 0) +
+  
   labs(title = "Bacterial Workload vs. Systemic Output",
        subtitle = "Quantitative coupling between fMet (biomass) and 5-HI (function)",
        x = "Bacterial Initiation Signal (fMet) Log2 Intensity",
        y = "Microbial Functional Product (5-HI) Log2 Intensity") +
   theme_bw(base_size = 14) +
-  theme(panel.grid.minor = element_blank())
+  theme(panel.grid.minor = element_blank(),
+        plot.title = element_text(face = "bold"))
 
-# 3. 高保真导出 (PDF + TIFF 300 DPI)
+# （3） 高保真导出
 ggsave("Figure_10_fMet_Coupling.pdf", plot = p_fmet_final, width = 8, height = 7)
-ggsave("Figure_10_fMet_Coupling.tiff", plot = p_fmet_final, width = 8, height = 7, dpi = 300, compression = "lzw")
-
+ggsave("Figure_10_fMet_Coupling.png", plot = p_fmet_final, width = 8, height = 7, dpi = 300)
 print(p_fmet_final)
 cat(">>> [Step 3.4] 全部图表与 Table S8 已生成并保存。\n")
 
