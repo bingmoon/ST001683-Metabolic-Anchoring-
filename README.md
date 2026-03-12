@@ -1,42 +1,24 @@
-# ST001683-Metabolic-Anchoring-
+# Bacteroides thetaiotaomicron Regulates Host Homeostasis
 
-# Metabolic Anchoring and Competitive Substrate Diversion by *Bacteroides thetaiotaomicron* (Project ST001683)
+This repository contains the complete analytical pipeline, R scripts, and processed data matrices for our study on how *Bacteroides thetaiotaomicron* (Bt) functions as a metabolic architect to anchor host systemic homeostasis.
 
-This repository contains the R scripts and processed data for the study:  
-**"Bacteroides thetaiota
-omicron regulates host homeostasis through metabolic anchoring and competitive substrate diversion"**
-
-## 🔬 Overview
-This project characterizes a novel metabolic phenomenon termed **"Metabolic Anchoring"** using a high-resolution multi-organ metabolomics approach. We utilize the ST001683 dataset (Bt-colonized vs. Germ-Free mice) to demonstrate how *B. thetaiotaomicron* (Bt) dictates host systemic metabolism.
-
-### Key Findings:
-- **Metabolic Anchoring:** Bt colonization compresses global metabolic variance (CV) by up to 73.0%.
-- **Mathematical Invariant:** Discovery of a constant suppression effect on the IDO pathway (Metabolic Control Index, **MCI ≈ -1.30**).
-- **Bioenergetic Pivot:** Identification of a systemic shift from glycolysis to the TCA cycle (flux ratio = 6.15).
+## 📌 Project Overview
+Our study utilizes a **Cross-scale Mechanistic Validation** approach:
+1. **In Vivo Discovery (ST001683):** Multi-organ metabolomics (cecum, feces, serum, urine) to reveal the "Metabolic Anchor" effect and entropy reduction.
+2. **In Vitro Validation (ST001688):** Large-scale pure culture data ($N=1049$ samples) to mechanistically prove the "Substrate Sink" effect (Tryptophan consumption and IPA/5-HI production).
 
 ## 📂 Repository Structure
-- `/Scripts`: R scripts for data preprocessing, PCA, MCI calculation, and FGSEA analysis.
-- `/Data`: Link to the processed abundance matrices (Cecal, Feces, Serum, and Urine).
-- `/Figures`: High-resolution versions of Figures 1-11.
+* `/Scripts/`
+  * `01_In_Vivo_Systemic_Analysis.R` - Pipeline for ST001683 (PCA, CV, AUC, MCI, FGSEA).
+  * `02_In_Vitro_Mechanistic_Validation.R` - Robust computational parser and Log2FC analysis for ST001688.
+* `/Data/Cleaned_Matrices/`
+  * *Note: Raw files from the ST001688 repository contained severe RTF formatting artifacts. We have provided the sanitized, ready-to-analyze CSV matrices here to ensure total reproducibility.*
+  * `ST001688_HILIC_POS_clean.csv` (Tryptophan extraction)
+  * `ST001688_RP_POS_clean.csv` (IPA extraction)
+  * `ST001688_RP_NEG_clean.csv` (5-HIAA extraction)
 
-## 🛠 Prerequisites
-To reproduce the analysis, you will need **R (v4.5.2 or later)** and the following packages:
-```R
-install.packages(c("ggplot2", "dplyr", "pROC", "pheatmap", "ggpubr"))
-if (!require("BiocManager", quietly = TRUE))
-    install.packages("BiocManager")
-BiocManager::install("fgsea")
+## 📊 Key Output
+The pipeline automatically generates all main figures and supplementary tables used in the manuscript, including the highly deterministic dose-response coupling and the cross-scale Log2FC validation plot (Figure 12).
 
-🚀 Quick Start
-Clone the repository:
-git clone https://github.com/bingmoon/ST001683-Metabolic-Anchoring-/tree/main
-Run the main analysis script:
-source("Scripts/analysis.R")
-📊 Data Source
-Raw data were acquired from the Metabolomics Workbench under Project ID: ST001683.
-
-✉️ Contact
-Corresponding Author: Hongbo He (moxizhen@gmail.com)
-Institution: West China Hospital, Sichuan University
-⚖️ License
-This project is licensed under the MIT License - see the LICENSE file for details.
+## 🛠 Usage
+All scripts are written in R (v4.4.1+). Ensure that the required packages (`dplyr`, `ggplot2`, `ggpubr`, `tidyr`, `pROC`, `fgsea`, `pheatmap`) are installed before running the pipeline.
