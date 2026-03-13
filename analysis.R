@@ -740,6 +740,7 @@ print(p_auc_rank)
 # 第八部分：系统代谢流重塑分析 (Systemic MCI Flux Analysis)
 # 目标：通过 MCI 指数定量证明“底物窃取”与“共生脱毒”机制
 # ==============================================================================
+
 library(ggplot2); library(dplyr); library(tidyr); library(ggpubr)
 
 get_col_precise <- function(keyword, exclude = NULL) {
@@ -838,67 +839,87 @@ print(p_trajectory_final)
 
 
 # ==============================================================================
-# 第九部分：系统级通路富集分析 (FGSEA)
+# 第九部分：系统级通路富集分析 (基于生物学真相的客观重构版)
 # ==============================================================================
-library(fgsea); library(dplyr); library(ggplot2); library(tidyr)
+library(fgsea)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
 
-cat(">>> [Step 3.5] 正在执行系统级通路富集分析 (最终修正版)...\n")
+cat("\n>>> 启动客观通路分析: 剔除技术噪音，还原生物学真相...\n")
 
-# 1. 准备 Rank 数据 (保持原代码逻辑)
+# 1. 提取终端尿液数据
 pathway_dat <- final_df_processed %>% filter(Organ == "Urine")
-all_mets <- setdiff(colnames(pathway_dat), c("Sample_ID", "Factors", "Join_ID", "Organ", "Grp"))
-stats_list <- numeric()
 
-for(m in all_mets) {
-  try({
-    res <- t.test(pathway_dat[[m]] ~ pathway_dat$Grp)
-    stats_list[m] <- res$statistic
-  }, silent=TRUE)
-}
+# 2. 【核心步骤：数据洗脱】剔除所有非生物学的人工内标
+raw_mets <- setdiff(colnames(pathway_dat), c("Sample_ID", "Factors", "Join_ID", "Organ", "Grp"))
 
-# 消除并列 (Jittering)
+# 正则剔除：D+数字(如D5), 13C(碳13), IS_(内标), CHLORO/BROMO(卤代防腐剂/内标)
+biological_mets <- raw_mets[!grepl("D[0-9]+|13C|IS_|STANDARD|CHLORO-|BROMO-", raw_mets, ignore.case = TRUE)]
+
+cat(">>> 剔除人工内标后，保留真实内源性代谢物数量:", length(biological_mets), "/", length(raw_mets), "\n")
+
+# 3. 计算真实代谢物的 Rank
+stats_list <- sapply(biological_mets, function(m) {
+  vals <- pathway_dat[[m]]
+  if(length(unique(vals)) > 1) {
+    tryCatch(t.test(vals ~ pathway_dat$Grp)$statistic, error = function(e) 0)
+  } else 0
+})
+
 set.seed(42)
-stats_list <- stats_list + rnorm(length(stats_list), sd = 1e-10)
+stats_list <- stats_list + rnorm(length(stats_list), mean=0, sd=1e-10)
 ranks <- sort(stats_list, decreasing = TRUE)
 
-# 2. 运行 FGSEA (使用你定义好的 pathways)
+# 4. 基于生物学词根的宽容匹配 (客观构建通路)
+get_biological_pathway <- function(keywords) {
+  pattern <- paste(keywords, collapse = "|")
+  # 仅在纯净的 biological_mets 中搜索
+  return(unique(grep(pattern, biological_mets, value = TRUE, ignore.case = TRUE)))
+}
+
+pathways <- list(
+  "Tryptophan Metabolism"    = get_biological_pathway(c("TRYPTOPHAN", "INDOLE", "KYNURENINE", "SEROTONIN")),
+  "Arginine & Proline"       = get_biological_pathway(c("ARGININE", "PROLINE", "PUTRESCINE", "ORNITHINE")),
+  "Glycolysis / TCA"         = get_biological_pathway(c("GLUCOSE", "PYRUV", "LACT", "CITR", "SUCCIN", "FUMAR", "MALIC", "MALATE", "ACONIT", "GALACTOSE", "MANNOSE")),
+  "Methionine Cycle"         = get_biological_pathway(c("METHIONINE", "HOMOCYSTEINE", "CYSTEINE", "TAURINE")),
+  "Fatty Acid Metabolism"    = get_biological_pathway(c("PALMIT", "STEAR", "OLEIC", "MYRIST", "CARNITINE", "DECANO")),
+  "Phenylalanine Metabolism" = get_biological_pathway(c("PHENYLALANINE", "TYROSINE"))
+)
+
+# 5. 运行客观的 FGSEA
 fgseaRes <- fgsea(pathways = pathways, stats = ranks, minSize = 2, maxSize = 500)
 
-# 3. 【核心修正】：处理数据以便导出和绘图
-# A. 将 leadingEdge 从 List 转为字符串，否则 write.csv 会报错
-# B. 创建显式的 Direction 字符列，消除 ggplot 颜色警告
+# 6. 整理导出与可视化
 fgsea_final <- as.data.frame(fgseaRes) %>%
-  mutate(leadingEdge = sapply(leadingEdge, paste, collapse = ", "),
-         Direction = ifelse(NES > 0, "Up_in_Bt", "Down_in_Bt")) %>%
+  mutate(
+    leadingEdge = sapply(leadingEdge, paste, collapse = ", "),
+    Direction = ifelse(NES > 0, "Up_in_Bt", "Down_in_Bt")
+  ) %>%
   arrange(desc(NES))
 
-# 保存数据表 (Table S9)
-write.csv(fgsea_final, "Table_S9_Pathway_Enrichment_Results.csv", row.names = FALSE)
+write.csv(fgsea_final, "Table_S9_Objective_Biological_Pathways.csv", row.names = FALSE)
 
-# 4. 绘图：采用最健壮的显式字符映射
-p_fgsea_final <- ggplot(fgsea_final, aes(x = reorder(pathway, NES), y = NES, fill = Direction)) +
-  geom_col(color = "black", linewidth = 0.3) + # 增加黑边，更有出版感
+# 强制绑定因子水平，确保图例完整
+fgsea_final$Direction <- factor(fgsea_final$Direction, levels = c("Up_in_Bt", "Down_in_Bt"))
+
+p_fgsea <- ggplot(fgsea_final, aes(x = reorder(pathway, NES), y = NES, fill = Direction)) +
+  geom_col(color = "black", linewidth = 0.4) +
   coord_flip() +
-  # 明确指定颜色，不再依赖逻辑判断
-  scale_fill_manual(values = c("Up_in_Bt" = "red", "Down_in_Bt" = "blue"),
-                    labels = c("Down in Bt (GF Enrich)", "Up in Bt (Bt Enrich)")) +
-  labs(title = "Pathway Enrichment Analysis (Urine)",
-       subtitle = "Global Metabolic Shifts",
-       x = "", y = "Normalized Enrichment Score (NES)",
-       fill = "Enrichment Direction") +
+  scale_fill_manual(
+    values = c("Up_in_Bt" = "#E41A1C", "Down_in_Bt" = "#377EB8"),
+    drop = FALSE, 
+    labels = c("Up in Bt (Global Activation)", "Down in Bt (Suppression)"),
+    name = "Metabolic Shift"
+  ) +
   theme_bw(base_size = 14) +
-  theme(legend.position = "bottom",
-        axis.text.y = element_text(face = "bold"))
+  labs(title = "Pathway Enrichment Analysis (Urine)",
+       subtitle = "Filtered for pure endogenous biological metabolites",
+       y = "Normalized Enrichment Score (NES)", x = "") +
+  theme(legend.position = "bottom", axis.text.y = element_text(face = "bold", color="black"))
 
-# 5. 高保真导出 (PDF + 300 DPI TIFF/PNG)
-ggsave("Figure_11_FGSEA_Pathways.pdf", plot = p_fgsea_final, width = 9, height = 6, device = "pdf")
-ggsave("Figure_11_FGSEA_Pathways.tiff", plot = p_fgsea_final, width = 9, height = 6, dpi = 300, compression = "lzw")
-ggsave("Figure_11_FGSEA_Pathways.png", plot = p_fgsea_final, width = 9, height = 6, dpi = 300)
-
-# 打印显示
-print(p_fgsea_final)
-
-cat(">>> [Step 3.5] 全部工作圆满完成！\n")
+print(p_fgsea)
+ggsave("Figure_11_Objective_Pathways.pdf", p_fgsea, width = 9, height = 5)
 
 
 
