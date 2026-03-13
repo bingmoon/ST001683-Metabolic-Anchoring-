@@ -891,52 +891,61 @@ pathways <- list(
 # 5. 运行客观的 FGSEA
 fgseaRes <- fgsea(pathways = pathways, stats = ranks, minSize = 2, maxSize = 500)
 
-# 6. 整理导出与可视化
+# 6. 生成并导出两个关键表格
+# 表格1：自定义通路的定义表 (防守证据)
+pathway_def_df <- data.frame(
+  Pathway_Module = names(pathways),
+  Included_Metabolites = sapply(pathways, paste, collapse = ", ")
+)
+write.csv(pathway_def_df, "Table_S9_Custom_Pathway_Definitions.csv", row.names = FALSE)
+cat(">>> Table S9 (通路定义表) 已导出!\n")
+
+# 表格2：FGSEA 统计结果表 (核心结论)
 fgsea_final <- as.data.frame(fgseaRes) %>%
   mutate(
     leadingEdge = sapply(leadingEdge, paste, collapse = ", "),
     Direction = ifelse(NES > 0, "Up_in_Bt", "Down_in_Bt")
   ) %>%
   arrange(desc(NES))
+write.csv(fgsea_final, "Table_S10_FGSEA_Results.csv", row.names = FALSE)
+cat(">>> Table S10 (FGSEA结果表) 已导出!\n")
 
-write.csv(fgsea_final, "Table_S9_Objective_Biological_Pathways.csv", row.names = FALSE)
-
-# 强制绑定因子水平，确保图例完整
-fgsea_final$Direction <- factor(fgsea_final$Direction, levels = c("Up_in_Bt", "Down_in_Bt"))
-
-# 1. 增加用于绘图的辅助列 (-Log10 P-value)
+# 7. 绘制全新高级图表：渐变色典雅柱状图 (Gradient Bar Plot)
 plot_dat <- fgsea_final %>%
   mutate(neg_log_p = -log10(pval))
 
-# 2. 绘制多维信息气泡图
-p_fgsea_lollipop <- ggplot(plot_dat, aes(x = NES, y = reorder(pathway, NES))) +
-  # 绘制棒棒糖的“棍子”
-  geom_segment(aes(x = 0, xend = NES, y = pathway, yend = pathway), 
-               color = "gray60", linewidth = 1.2) +
-  # 绘制气泡：大小映射size，颜色映射-log10(p)
-  geom_point(aes(size = size, color = neg_log_p), alpha = 0.9) +
-  # 颜色渐变：从浅橙红过渡到深暗红
-  scale_color_gradientn(colors = c("#FF9999", "#E41A1C", "#800000"), 
-                        name = bquote("-Log"["10"]~"(P-value)")) +
-  # 气泡大小范围
-  scale_size_continuous(range = c(5, 12), name = "Metabolite Count") +
-  # 增加一条0的基准线
-  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 0.8) +
-  theme_bw(base_size = 14) +
-  labs(title = "Pathway Enrichment Analysis (Urine)",
-       subtitle = "Global Metabolic Activation by Bt Colonization",
+p_fgsea_barplot <- ggplot(plot_dat, aes(x = NES, y = reorder(pathway, NES), fill = neg_log_p)) +
+  # 绘制柱子，添加黑色边框增加质感
+  geom_bar(stat = "identity", width = 0.65, color = "black", linewidth = 0.6) +
+  # 设置高级渐变色（从暖黄过渡到深红，顶级期刊常用配色）
+  scale_fill_gradientn(colors = c("#FFEDA0", "#FEB24C", "#F03B20", "#BD0026"), 
+                       name = bquote("-Log"["10"]~"(P-value)")) +
+  # 在柱子外侧标出具体的 NES 数值，增加信息密度
+  geom_text(aes(label = sprintf("NES = %.2f", NES)), 
+            hjust = -0.15, size = 4.5, fontface = "italic", color = "black") +
+  # 扩展 X 轴空间，防止文字被截断
+  scale_x_continuous(expand = expansion(mult = c(0, 0.25))) +
+  # 使用极简主题 (类似于 Cell 系列)
+  theme_classic(base_size = 15) +
+  labs(title = "Systemic Metabolic Pathway Activation",
+       subtitle = "Custom FGSEA module enrichment in terminal urine",
        x = "Normalized Enrichment Score (NES)", y = "") +
   theme(
-    legend.position = "right",
-    panel.grid.minor = element_blank(),
-    axis.text.y = element_text(face = "bold", color = "black")
+    axis.text.y = element_text(face = "bold", color = "black", size = 13),
+    axis.text.x = element_text(color = "black", size = 12),
+    axis.line = element_line(linewidth = 0.8, color = "black"),
+    axis.ticks = element_line(linewidth = 0.8, color = "black"),
+    # 将图例放到图的右下角空白处，使图表更紧凑干净
+    legend.position = c(0.85, 0.25), 
+    legend.background = element_rect(fill = "transparent"),
+    plot.title = element_text(face = "bold")
   )
 
-print(p_fgsea_lollipop)
-ggsave("Figure_11_FGSEA_Lollipop.pdf", p_fgsea_lollipop, width = 9, height = 5.5)
-ggsave("Figure_11_FGSEA_Lollipop.png", p_fgsea_lollipop, width = 9, height = 5.5, dpi = 300)
+print(p_fgsea_barplot)
+ggsave("Figure_11_FGSEA_Barplot.pdf", p_fgsea_barplot, width = 8.5, height = 5)
+ggsave("Figure_11_FGSEA_Barplot.png", p_fgsea_barplot, width = 8.5, height = 5, dpi = 300)
 
-cat(">>> 高级棒棒糖图生成完毕！\n")
+cat(">>> 全新渐变色高级柱状图生成完毕！\n")
 
 
 
