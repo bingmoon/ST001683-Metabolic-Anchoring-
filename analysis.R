@@ -903,23 +903,39 @@ write.csv(fgsea_final, "Table_S9_Objective_Biological_Pathways.csv", row.names =
 # 强制绑定因子水平，确保图例完整
 fgsea_final$Direction <- factor(fgsea_final$Direction, levels = c("Up_in_Bt", "Down_in_Bt"))
 
-p_fgsea <- ggplot(fgsea_final, aes(x = reorder(pathway, NES), y = NES, fill = Direction)) +
-  geom_col(color = "black", linewidth = 0.4) +
-  coord_flip() +
-  scale_fill_manual(
-    values = c("Up_in_Bt" = "#E41A1C", "Down_in_Bt" = "#377EB8"),
-    drop = FALSE, 
-    labels = c("Up in Bt (Global Activation)", "Down in Bt (Suppression)"),
-    name = "Metabolic Shift"
-  ) +
+# 1. 增加用于绘图的辅助列 (-Log10 P-value)
+plot_dat <- fgsea_final %>%
+  mutate(neg_log_p = -log10(pval))
+
+# 2. 绘制多维信息气泡图
+p_fgsea_lollipop <- ggplot(plot_dat, aes(x = NES, y = reorder(pathway, NES))) +
+  # 绘制棒棒糖的“棍子”
+  geom_segment(aes(x = 0, xend = NES, y = pathway, yend = pathway), 
+               color = "gray60", linewidth = 1.2) +
+  # 绘制气泡：大小映射size，颜色映射-log10(p)
+  geom_point(aes(size = size, color = neg_log_p), alpha = 0.9) +
+  # 颜色渐变：从浅橙红过渡到深暗红
+  scale_color_gradientn(colors = c("#FF9999", "#E41A1C", "#800000"), 
+                        name = bquote("-Log"["10"]~"(P-value)")) +
+  # 气泡大小范围
+  scale_size_continuous(range = c(5, 12), name = "Metabolite Count") +
+  # 增加一条0的基准线
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 0.8) +
   theme_bw(base_size = 14) +
   labs(title = "Pathway Enrichment Analysis (Urine)",
-       subtitle = "Filtered for pure endogenous biological metabolites",
-       y = "Normalized Enrichment Score (NES)", x = "") +
-  theme(legend.position = "bottom", axis.text.y = element_text(face = "bold", color="black"))
+       subtitle = "Global Metabolic Activation by Bt Colonization",
+       x = "Normalized Enrichment Score (NES)", y = "") +
+  theme(
+    legend.position = "right",
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(face = "bold", color = "black")
+  )
 
-print(p_fgsea)
-ggsave("Figure_11_Objective_Pathways.pdf", p_fgsea, width = 9, height = 5)
+print(p_fgsea_lollipop)
+ggsave("Figure_11_FGSEA_Lollipop.pdf", p_fgsea_lollipop, width = 9, height = 5.5)
+ggsave("Figure_11_FGSEA_Lollipop.png", p_fgsea_lollipop, width = 9, height = 5.5, dpi = 300)
+
+cat(">>> 高级棒棒糖图生成完毕！\n")
 
 
 
