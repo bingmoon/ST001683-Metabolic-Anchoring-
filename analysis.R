@@ -941,13 +941,29 @@ cat(">>> 高级棒棒糖图生成完毕！\n")
 
 
 # ==============================================================================
-# 终极定稿：ST001688 跨尺度机制验证 (In Vivo + In Vitro)
+# 终极定稿：ST001688 跨尺度机制验证 (In Vivo + In Vitro) - Standalone Version
 # ==============================================================================
+library(jsonlite)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(ggpubr)
 library(stringr)
+library(gridExtra)
+
+cat(">>> 启动机制验证流程...\n")
+
+# --- 0. 重新抓取基础元数据 (修复 mapping_df not found 报错) ---
+cat(">>> [Step 0] 正在从 Metabolomics Workbench 获取样本元数据...\n")
+factors_url <- "https://www.metabolomicsworkbench.org/rest/study/study_id/ST001688/factors"
+tryCatch({
+  metadata_raw <- fromJSON(factors_url)
+  mapping_df <- bind_rows(metadata_raw) %>%
+    select(Sample_ID = local_sample_id, Group_Info = factors)
+  cat(">>> 元数据获取成功。\n")
+}, error = function(e) {
+  stop("无法连接到数据库获取元数据，请检查网络连接。")
+})
 
 # --- 1. 建立基准 Mapping 表 (确保分母一致) ---
 mapping_final <- mapping_df %>%
@@ -961,22 +977,28 @@ mapping_final <- mapping_df %>%
 
 # --- 2. 严谨提取函数 (多重校验) ---
 extract_rigorous <- function(file_path, keyword, label) {
-  if(!file.exists(file_path)) return(NULL)
+  if(!file.exists(file_path)) {
+    cat(paste("   [!] 找不到文件:", file_path, "\n"))
+    return(NULL)
+  }
   lines <- readLines(file_path, warn = FALSE)
   
   # 定位表头和数据
   header_idx <- grep("Metabolite_name", lines)[1]
   data_idx <- grep(keyword, lines, ignore.case = TRUE)[1]
-  if(is.na(data_idx)) return(NULL)
+  if(is.na(data_idx)) {
+    cat(paste("   [!] 未找到代谢物:", keyword, "\n"))
+    return(NULL)
+  }
   
-  # 正则解析：确保不漏掉任何一个数字
+  # 正则解析
   ids <- unlist(str_extract_all(lines[header_idx], "ncbimw_[0-9]+"))
   vals <- as.numeric(unlist(str_extract_all(lines[data_idx], "(?<=[\t ])[0-9.]+(?=[\t \r\n]|$)")))
   
   n_len <- min(length(ids), length(vals))
   df_raw <- data.frame(Sample_ID = ids[1:n_len], Abundance = vals[1:n_len])
   
-  # 关键：与 Mapping 表强制对齐，确保缺失样本补为 0 (未检出)
+  # 关键：与 Mapping 表强制对齐，确保缺失样本补为 0
   df_merged <- mapping_final %>%
     left_join(df_raw, by = "Sample_ID") %>%
     mutate(Abundance = replace_na(Abundance, 0), Metabolite = label)
@@ -985,6 +1007,7 @@ extract_rigorous <- function(file_path, keyword, label) {
 }
 
 # --- 3. 执行全量提取 ---
+cat(">>> [Step 1] 正在提取 CSV 数据...\n")
 d1 <- extract_rigorous("ST001688_HILIC_POS_clean.csv", "TRYPTOPHAN", "Tryptophan")
 d2 <- extract_rigorous("ST001688_RP_POS_clean.csv", "INDOLEPROPIONIC", "IPA")
 d3 <- extract_rigorous("ST001688_RP_NEG_clean.csv", "5-HYDROXYINDOLE", "5-HIAA")
@@ -1002,35 +1025,48 @@ table_s10 <- vitro_all %>%
   )
 write.csv(table_s10, "Table_S10_Final_Stats.csv", row.names = FALSE)
 
-# --- 5. 绘图 Panel A：原始丰度点图 (展示显著性) ---
+# --- 5. 绘图 Panel A：原始丰度点图 ---
+cat(">>> [Step 2] 正在绘制 Figure 12...\n")
 plot_data_a <- vitro_all %>% mutate(Log2 = log2(Abundance + 1))
 p_a <- ggplot(plot_data_a, aes(x = Metabolite, y = Log2, fill = Group)) +
   stat_summary(fun = mean, geom = "bar", position = position_dodge(0.8), width = 0.7, color = "black") +
   stat_summary(fun.data = mean_se, geom = "errorbar", position = position_dodge(0.8), width = 0.2) +
   geom_jitter(position = position_dodge(0.8), alpha = 0.1, size = 0.5) +
-  scale_fill_manual(values = c("Bt_Culture"="#E41A1C", "Media_Blank"="#999999")) +
-  stat_compare_means(aes(group = Group), label = "p.signif", method = "wilcox.test", label.y.npc = "top") +
-  theme_bw() + labs(title = "A. Absolute Intensities (Log2)", y = "Log2(Abundance+1)", x="")
+  scale_fill_manual(values = c("Bt_Culture"="#E41A1C", "Media_Blank"="#737373"),
+                    labels = c("Bt Pure Culture", "Sterile Media")) +
+  stat_compare_means(aes(group = Group), label = "p.signif", method = "wilcox.test", label.y.npc = "top", size=6) +
+  theme_bw(base_size = 14) + 
+  labs(title = "A. Absolute Intensities (Log2)", y = "Log2(Abundance+1)", x="") +
+  theme(legend.position = "top", panel.grid.minor = element_blank())
 
-# --- 6. 绘图 Panel B：倍数变化 (展示机制方向) ---
-fc_data <- table_s10 %>%
-  select(Metabolite, Group, Mean_Raw) %>%
-  pivot_wider(names_from = Group, values_from = Mean_Raw) %>%
-  mutate(Log2FC = log2(Bt_Culture / Media_Blank)) %>%
-  mutate(Direction = ifelse(Log2FC > 0, "Produced", "Consumed"))
+# --- 6. 绘图 Panel B：带 95% CI 误差线的 Log2FC ---
+stats_for_fc <- plot_data_a %>%
+  group_by(Metabolite, Group) %>%
+  summarise(Mean_Log = mean(Log2, na.rm = TRUE), SE_Log = sd(Log2, na.rm = TRUE)/sqrt(n()), .groups = "drop")
 
-p_b <- ggplot(fc_data, aes(x = Metabolite, y = Log2FC, fill = Direction)) +
+fc_with_error <- stats_for_fc %>%
+  pivot_wider(names_from = Group, values_from = c(Mean_Log, SE_Log)) %>%
+  mutate(
+    Log2FC = Mean_Log_Bt_Culture - Mean_Log_Media_Blank,
+    SE_diff = sqrt(SE_Log_Bt_Culture^2 + SE_Log_Media_Blank^2),
+    CI_95 = 1.96 * SE_diff,
+    Direction = ifelse(Log2FC > 0, "Produced by Bt", "Consumed by Bt")
+  )
+
+p_b <- ggplot(fc_with_error, aes(x = Metabolite, y = Log2FC, fill = Direction)) +
   geom_col(color = "black", width = 0.6) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  scale_fill_manual(values = c("Produced"="#E41A1C", "Consumed"="#377EB8")) +
-  geom_text(aes(label = sprintf("%.2f", Log2FC), vjust = ifelse(Log2FC > 0, -1, 1.5)), fontface="bold") +
-  theme_bw() + labs(title = "B. Mechanistic Proof (Log2FC)", y = "Log2 Fold Change")
+  geom_errorbar(aes(ymin = Log2FC - CI_95, ymax = Log2FC + CI_95), width = 0.2, linewidth = 0.8, color="black") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black", linewidth = 0.8) +
+  scale_fill_manual(values = c("Produced by Bt"="#E41A1C", "Consumed by Bt"="#377EB8")) +
+  geom_text(aes(label = sprintf("%.2f", Log2FC), vjust = ifelse(Log2FC > 0, -3.5, 4.0)), fontface="bold", size=5) +
+  coord_cartesian(clip = 'off') + 
+  theme_bw(base_size = 14) + 
+  labs(title = "B. Metabolic Capacity Validation", y = "Log2 Fold Change \u00B1 95% CI", x="") +
+  theme(legend.position = "top", panel.grid.minor = element_blank())
 
 # --- 7. 合并双图并导出 ---
-library(gridExtra)
 p_final <- grid.arrange(p_a, p_b, ncol = 1)
-ggsave("Figure_12_Comprehensive_Validation.png", p_final, width = 8, height = 10, dpi = 300)
-ggsave("Figure_12_Comprehensive_Validation.pdf", p_final, width = 8, height = 10)
+ggsave("Figure_12_Comprehensive_Validation_Optimized.png", p_final, width = 8, height = 10, dpi = 300)
+ggsave("Figure_12_Comprehensive_Validation_Optimized.pdf", p_final, width = 8, height = 10)
 
-cat("\n>>> 最终核查结果 (Log2FC):\n")
-print(fc_data)
+cat(">>> 流程完毕！请检查生成的图表与表格。\n")
