@@ -694,6 +694,7 @@ all_aucs_clean <- all_aucs_raw %>%
 # 3. 【核心新增】置换检验函数 (Permutation Test)
 # 针对 AUC > 0.95 的 Top 分子执行 1000 次随机打乱验证
 run_permutation <- function(df, met_name, organ_name, n_perm = 1000) {
+  set.seed(123)
   sub_df <- df %>% filter(Organ == organ_name)
   actual_auc <- as.numeric(roc(sub_df$Grp, sub_df[[met_name]], quiet=T)$auc)
   null_aucs <- replicate(n_perm, as.numeric(roc(sample(sub_df$Grp), sub_df[[met_name]], quiet=T)$auc))
