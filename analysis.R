@@ -254,9 +254,9 @@ ggsave("Figure_2_Venn_Overlap.png", plot = p_venn_final, width = 8, height = 7, 
 core_mets <- Reduce(intersect, venn_list)
 cat("\n>>> 四个器官共同显著的核心代谢物数量:", length(core_mets), "\n")
 
-# 6. [新增] 自动保存核心分子列表为 Excel/CSV (用于 Supplementary Table S3)
+# 6. [新增] 自动保存核心分子列表为 Excel/CSV 
 core_mets_df <- data.frame(Core_Metabolites = core_mets)
-write.csv(core_mets_df, "Table_S3_Core_41_Metabolites.csv", row.names = FALSE)
+write.csv(core_mets_df, "Table_S2_Core_41_Metabolites.csv", row.names = FALSE)
 
 # 7. 明星分子路径核对 (保留你原代码的精华)
 stars <- c("TRYPTOPHAN", "5-HYDROXYINDOLE", "INDOLEPROPIONIC", "N-ACETYLPUTRESCINE")
@@ -317,7 +317,7 @@ stability_summary <- cv_analysis %>%
 # 打印并保存统计结果 (用于 Results 3.1b 的写作支撑)
 cat("\n>>> 代谢稳态收敛统计表 (Bt vs GF):\n")
 print(stability_summary)
-write.csv(stability_summary, "Table_S2_CV_Stability_Summary.csv", row.names = FALSE)
+write.csv(stability_summary, "Table_S3_CV_Stability_Summary.csv", row.names = FALSE)
 
 # 3. 绘制出版级对比图 (修复 linewidth 警告，优化布局)
 p_cv_final <- ggplot(cv_analysis, aes(x = Grp, y = cv, fill = Grp)) +
@@ -381,7 +381,7 @@ trp_summary_final <- trp_stability_full %>%
   )
 
 # 3. 保存表格 (对齐命名规范)
-write.csv(trp_stability_full, "Table_S3_Trp_Stability_Details.csv", row.names = FALSE)
+# write.csv(trp_stability_full, "Table_S3_Trp_Stability_Details.csv", row.names = FALSE)
 cat("\n>>> 统计摘要 (完全无损):\n"); print(trp_summary_final)
 
 # 4. 绘图 (采用完全自适应坐标系)
@@ -460,7 +460,8 @@ plot_spatial_optimized <- function(keyword, title_label) {
 # 3. 执行分析并获取数据
 res_ipa  <- plot_spatial_optimized("INDOLEPROPIONIC", "Spatial Tracking: Indolepropionic Acid (IPA)")
 res_5htp <- plot_spatial_optimized("5-HYDROXY-TRYPTOPHAN", "Spatial Tracking: Host 5-HTP Depletion")
-
+res_trp <- plot_spatial_optimized("^TRYPTOPHAN$", "Spatial Tracking: Free Tryptophan Pool") 
+                            
 # 4. 生成跨器官统计汇总表 (Table S5)
 cat(">>> 正在生成跨器官丰度统计表...\n")
 summary_stats <- bind_rows(
@@ -470,7 +471,7 @@ summary_stats <- bind_rows(
   group_by(Metabolite, Organ, Grp) %>%
   summarise(Mean = mean(Value), SD = sd(Value), .groups = "drop")
 
-write.csv(summary_stats, "Table_S5_Spatial_Tracking_Summary.csv", row.names = FALSE)
+write.csv(summary_stats, "Table_S4_Spatial_Tracking_Summary.csv", row.names = FALSE)
 
 # 5. 高清导出 (PDF + TIFF 300 DPI)
 ggsave("Figure_5_Spatial_IPA.pdf", res_ipa$plot, width = 8, height = 5)
@@ -539,7 +540,7 @@ urine_stats <- urine_dat %>%
   pivot_wider(names_from = Grp, values_from = c(Mean, SD)) %>%
   mutate(Log2FC = Mean_Bt - Mean_GF)
 
-write.csv(urine_stats, "Table_S6_Urinary_Signatures_Stats.csv", row.names = FALSE)
+write.csv(urine_stats, "Table_S8_Urinary_Signatures_Stats.csv", row.names = FALSE)
 
 # 5. 高清导出
 ggsave("Figure_10_Urine_Signatures.pdf", p_signatures_final, width = 10, height = 5)
@@ -609,7 +610,7 @@ cor_bt <- plot_curated_heatmap("Bt", "Figure_7_Network_Bt.pdf")
 cor_gf <- plot_curated_heatmap("GF", "Figure_7_Network_GF.pdf")
 
 # 保存相关性表格 (Table S8)
-if(!is.null(cor_bt)) write.csv(cor_bt, "Table_S8_Bt_Correlation_Matrix.csv")
+if(!is.null(cor_bt)) write.csv(cor_bt, "Table_S6_Bt_Correlation_Matrix.csv")
 
 # ------------------------------------------------------------------------------
 # PART 2: [6b] 细菌负荷与功能的量效相关性 (Scatter Plot)
@@ -714,8 +715,8 @@ top_biomarkers$Permutation_P <- sapply(1:nrow(top_biomarkers), function(i) {
 top_biomarkers <- top_biomarkers %>%
   mutate(Permutation_P = ifelse(Permutation_P == 0, "< 0.001", sprintf("%.3f", Permutation_P)))
 
-write.csv(top_biomarkers, "Table_S4_Full_Biomarker_Performance.csv", row.names = FALSE)
-cat(">>> 已保存核心标志物数据至 Table_S4_Full_Biomarker_Performance.csv\n")
+write.csv(top_biomarkers, "Table_S7_Full_Biomarker_Performance.csv", row.names = FALSE)
+cat(">>> 已保存核心标志物数据至 Table_S7_Full_Biomarker_Performance.csv\n")
 
 # 6. 绘制: AUC 棒棒糖图 (Lollipop Plot)
 p_auc_rank <- ggplot(top_biomarkers, aes(x = reorder(Metabolite, AUC), y = AUC, color = Organ)) +
@@ -784,7 +785,7 @@ summary_mci_table <- ratio_full_df %>%
   group_by(Organ, Grp) %>%
   summarise(across(starts_with("Ratio"), \(x) mean(x, na.rm = TRUE)), .groups = "drop")
 
-write.csv(summary_mci_table, "Table_S7_Systemic_MCI_Trajectory_Stats.csv", row.names = FALSE)
+write.csv(summary_mci_table, "Table_S5_Systemic_MCI_Trajectory_Stats.csv", row.names = FALSE)
 
 # ------------------------------------------------------------------------------
 # 4. 绘图 A：机制箱线图 (Figure 8A - 显著性验证)
