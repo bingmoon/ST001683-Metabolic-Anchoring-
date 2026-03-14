@@ -1034,7 +1034,7 @@ table_s10 <- vitro_all %>%
     SD_Raw = sd(Abundance),
     .groups = "drop"
   )
-write.csv(table_s10, "Table_S10_Final_Stats.csv", row.names = FALSE)
+write.csv(table_s10, "Table_S11_Final_Stats.csv", row.names = FALSE)
 
 # --- 5. 绘图 Panel A：原始丰度点图 ---
 cat(">>> [Step 2] 正在绘制 Figure 12...\n")
