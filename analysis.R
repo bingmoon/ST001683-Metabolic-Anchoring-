@@ -473,10 +473,10 @@ summary_stats <- bind_rows(
 write.csv(summary_stats, "Table_S5_Spatial_Tracking_Summary.csv", row.names = FALSE)
 
 # 5. 高清导出 (PDF + TIFF 300 DPI)
-ggsave("Figure_6_Spatial_IPA.pdf", res_ipa$plot, width = 8, height = 5)
-ggsave("Figure_6_Spatial_IPA.tiff", res_ipa$plot, width = 8, height = 5, dpi = 300, compression = "lzw")
-ggsave("Figure_6_Spatial_5HTP.pdf", res_5htp$plot, width = 8, height = 5)
-ggsave("Figure_6_Spatial_5HTP.tiff", res_5htp$plot, width = 8, height = 5, dpi = 300, compression = "lzw")
+ggsave("Figure_5_Spatial_IPA.pdf", res_ipa$plot, width = 8, height = 5)
+ggsave("Figure_5_Spatial_IPA.tiff", res_ipa$plot, width = 8, height = 5, dpi = 300, compression = "lzw")
+ggsave("Figure_5_Spatial_5HTP.pdf", res_5htp$plot, width = 8, height = 5)
+ggsave("Figure_5_Spatial_5HTP.tiff", res_5htp$plot, width = 8, height = 5, dpi = 300, compression = "lzw")
 
 print(res_ipa$plot)
 print(res_5htp$plot)
@@ -542,8 +542,8 @@ urine_stats <- urine_dat %>%
 write.csv(urine_stats, "Table_S6_Urinary_Signatures_Stats.csv", row.names = FALSE)
 
 # 5. 高清导出
-ggsave("Figure_7_Urine_Signatures.pdf", p_signatures_final, width = 10, height = 5)
-ggsave("Figure_7_Urine_Signatures.tiff", p_signatures_final, width = 10, height = 5, dpi = 300, compression = "lzw")
+ggsave("Figure_10_Urine_Signatures.pdf", p_signatures_final, width = 10, height = 5)
+ggsave("Figure_10_Urine_Signatures.tiff", p_signatures_final, width = 10, height = 5, dpi = 300, compression = "lzw")
 
 print(p_signatures_final)
 
@@ -605,8 +605,8 @@ plot_curated_heatmap <- function(group_name, filename) {
   return(cor_mat)
 }
 
-cor_bt <- plot_curated_heatmap("Bt", "Figure_9_Network_Bt.pdf")
-cor_gf <- plot_curated_heatmap("GF", "Figure_9_Network_GF.pdf")
+cor_bt <- plot_curated_heatmap("Bt", "Figure_7_Network_Bt.pdf")
+cor_gf <- plot_curated_heatmap("GF", "Figure_7_Network_GF.pdf")
 
 # 保存相关性表格 (Table S8)
 if(!is.null(cor_bt)) write.csv(cor_bt, "Table_S8_Bt_Correlation_Matrix.csv")
@@ -652,8 +652,8 @@ p_fmet_final <- ggscatter(cor_dat_scatter, x = "fMet_Signal", y = "HI5_Product",
         plot.title = element_text(face = "bold"))
 
 # （3） 高保真导出
-ggsave("Figure_10_fMet_Coupling.pdf", plot = p_fmet_final, width = 8, height = 7)
-ggsave("Figure_10_fMet_Coupling.png", plot = p_fmet_final, width = 8, height = 7, dpi = 300)
+ggsave("Figure_8_fMet_Coupling.pdf", plot = p_fmet_final, width = 8, height = 7)
+ggsave("Figure_8_fMet_Coupling.png", plot = p_fmet_final, width = 8, height = 7, dpi = 300)
 print(p_fmet_final)
 cat(">>> [Step 3.4] 全部图表与 Table S8 已生成并保存。\n")
 
@@ -731,8 +731,8 @@ p_auc_rank <- ggplot(top_biomarkers, aes(x = reorder(Metabolite, AUC), y = AUC, 
   theme(panel.grid.minor = element_blank())
 
 # 高清导出
-ggsave("Figure_5_AUC_Ranking.pdf", plot = p_auc_rank, width = 8, height = 7, device = "pdf")
-ggsave("Figure_5_AUC_Ranking.png", plot = p_auc_rank, width = 8, height = 7, dpi = 300)
+ggsave("Figure_9_AUC_Ranking.pdf", plot = p_auc_rank, width = 8, height = 7, device = "pdf")
+ggsave("Figure_9_AUC_Ranking.png", plot = p_auc_rank, width = 8, height = 7, dpi = 300)
 
 print(p_auc_rank)
 
@@ -830,10 +830,10 @@ p_trajectory_final <- summary_mci_table %>%
   theme(legend.position = "top", strip.text = element_text(face = "bold"))
 
 # 6. 高清并行导出
-ggsave("Figure_8A_MCI_Boxplots.pdf", p_boxplots_mci, width = 10, height = 6)
-ggsave("Figure_8A_MCI_Boxplots.tiff", p_boxplots_mci, width = 10, height = 6, dpi = 300, compression = "lzw")
-ggsave("Figure_8B_MCI_Trajectory.pdf", p_trajectory_final, width = 8, height = 8)
-ggsave("Figure_8B_MCI_Trajectory.tiff", p_trajectory_final, width = 8, height = 8, dpi = 300, compression = "lzw")
+ggsave("Figure_6A_MCI_Boxplots.pdf", p_boxplots_mci, width = 10, height = 6)
+ggsave("Figure_6A_MCI_Boxplots.tiff", p_boxplots_mci, width = 10, height = 6, dpi = 300, compression = "lzw")
+ggsave("Figure_6B_MCI_Trajectory.pdf", p_trajectory_final, width = 8, height = 8)
+ggsave("Figure_6B_MCI_Trajectory.tiff", p_trajectory_final, width = 8, height = 8, dpi = 300, compression = "lzw")
 
 print(p_boxplots_mci)
 print(p_trajectory_final)
