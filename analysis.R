@@ -1025,16 +1025,50 @@ d3 <- extract_rigorous("ST001688_RP_NEG_clean.csv", "5-HYDROXYINDOLE", "5-HIAA")
 
 vitro_all <- bind_rows(d1, d2, d3)
 
-# --- 4. 生成统计表 Table S10 ---
-table_s10 <- vitro_all %>%
+
+# --- 4. 生成优化版统计表 Table S11 ---
+
+# 步骤 1：生成基础描述性统计 (计算原值的 Mean 和 SD)
+stats_desc <- vitro_all %>%
   group_by(Metabolite, Group) %>%
   summarise(
     N = n(),
-    Mean_Raw = mean(Abundance),
-    SD_Raw = sd(Abundance),
+    Mean_Raw = mean(Abundance, na.rm = TRUE),
+    SD_Raw = sd(Abundance, na.rm = TRUE),
     .groups = "drop"
   )
-write.csv(table_s10, "Table_S11_Final_Stats.csv", row.names = FALSE)
+
+# 步骤 2：按照文章 Methods 要求，计算 Log2FC 和 Wilcoxon P值
+stats_test <- vitro_all %>%
+  # 提前进行 log2(x + 1) 转换，屏蔽极端极大值的影响
+  mutate(Log2_Abund = log2(Abundance + 1)) %>%
+  group_by(Metabolite) %>%
+  summarise(
+    # 计算 Log2 倍数变化 (Bt组的对数均值 - Blank组的对数均值)
+    Log2FC = mean(Log2_Abund[Group == "Bt_Culture"], na.rm = TRUE) - 
+             mean(Log2_Abund[Group == "Media_Blank"], na.rm = TRUE),
+    
+    # 运行 Wilcoxon rank-sum test 非参数检验
+    P_value = wilcox.test(
+      Log2_Abund[Group == "Bt_Culture"], 
+      Log2_Abund[Group == "Media_Blank"], 
+      exact = FALSE
+    )$p.value,
+    
+    .groups = "drop"
+  )
+
+# 步骤 3：自动合并两个表，生成最终包含所有维度的完整表格
+table_s11_final <- stats_desc %>%
+  left_join(stats_test, by = "Metabolite") %>%
+  # (可选) 对数值保留合理的小数位数，让表格更美观
+  mutate(
+    Log2FC = round(Log2FC, 3),
+    P_value = signif(P_value, 3) 
+  )
+
+# 输出结果文件
+write.csv(table_s11_final, "Table_S11_Final_Stats.csv", row.names = FALSE)
 
 # --- 5. 绘图 Panel A：原始丰度点图 ---
 cat(">>> [Step 2] 正在绘制 Figure 12...\n")
